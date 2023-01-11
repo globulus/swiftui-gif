@@ -63,14 +63,24 @@ public class UIGIFImage: UIView {
     }
     
     func updateGIF(data: Data) {
-        Task {
-            imageView.image = await UIImage.gifImage(data: data)
+        updateWithImage {
+            UIImage.gifImage(data: data)
         }
     }
     
     func updateGIF(name: String) {
-        Task {
-            imageView.image = await UIImage.gifImage(name: name)
+        updateWithImage {
+            UIImage.gifImage(name: name)
+        }
+    }
+    
+    private func updateWithImage(_ getImage: @escaping () -> UIImage?) {
+        DispatchQueue.global(qos: .userInteractive).async {
+            let image = getImage()
+            
+            DispatchQueue.main.async {
+                self.imageView.image = image
+            }
         }
     }
     
@@ -80,7 +90,7 @@ public class UIGIFImage: UIView {
 }
 
 public extension UIImage {
-    class func gifImage(data: Data) async -> UIImage? {
+    class func gifImage(data: Data) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil)
         else {
             return nil
@@ -111,13 +121,13 @@ public extension UIImage {
                                      duration: Double(duration) / 1000.0)
     }
     
-    class func gifImage(name: String) async -> UIImage? {
+    class func gifImage(name: String) -> UIImage? {
         guard let url = Bundle.main.url(forResource: name, withExtension: "gif"),
               let data = try? Data(contentsOf: url)
         else {
             return nil
         }
-        return await gifImage(data: data)
+        return gifImage(data: data)
     }
 }
 
