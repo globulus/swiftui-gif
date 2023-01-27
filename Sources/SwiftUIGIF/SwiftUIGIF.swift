@@ -63,11 +63,25 @@ public class UIGIFImage: UIView {
     }
     
     func updateGIF(data: Data) {
-        imageView.image = UIImage.gifImage(data: data)
+        updateWithImage {
+            UIImage.gifImage(data: data)
+        }
     }
     
     func updateGIF(name: String) {
-        imageView.image = UIImage.gifImage(name: name)
+        updateWithImage {
+            UIImage.gifImage(name: name)
+        }
+    }
+    
+    private func updateWithImage(_ getImage: @escaping () -> UIImage?) {
+        DispatchQueue.global(qos: .userInteractive).async {
+            let image = getImage()
+            
+            DispatchQueue.main.async {
+                self.imageView.image = image
+            }
+        }
     }
     
     private func initView() {
