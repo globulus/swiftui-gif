@@ -1,96 +1,153 @@
 import SwiftUI
 
 public struct GIFImage: UIViewRepresentable {
-    private let data: Data?
-    private let name: String?
-    
-    public init(data: Data) {
-        self.data = data
-        self.name = nil
+  private let data: Data?
+  private let name: String?
+  private let repetitions: Int?
+  private let onComplete: (() -> Void)?
+  
+  public init(
+    data: Data,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.data = data
+    self.name = nil
+    self.repetitions = repetitions
+    self.onComplete = onComplete
+  }
+  
+  public init(
+    name: String,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.data = nil
+    self.name = name
+    self.repetitions = repetitions
+    self.onComplete = onComplete
+  }
+  
+  public func makeUIView(context: Context) -> UIGIFImage {
+    if let data = data {
+      return UIGIFImage(data: data, repetitions: repetitions, onComplete: onComplete)
+    } else {
+      return UIGIFImage(name: name ?? "", repetitions: repetitions, onComplete: onComplete)
     }
-    
-    public init(name: String) {
-        self.data = nil
-        self.name = name
+  }
+  
+  public func updateUIView(_ uiView: UIGIFImage, context: Context) {
+    if let data = data {
+      uiView.updateGIF(data: data, repetitions: repetitions, onComplete: onComplete)
+    } else {
+      uiView.updateGIF(name: name ?? "", repetitions: repetitions, onComplete: onComplete)
     }
-    
-    public func makeUIView(context: Context) -> UIGIFImage {
-        if let data = data {
-            return UIGIFImage(data: data)
-        } else {
-            return UIGIFImage(name: name ?? "")
-        }
-    }
-    
-    public func updateUIView(_ uiView: UIGIFImage, context: Context) {
-        if let data = data {
-            uiView.updateGIF(data: data)
-        } else {
-            uiView.updateGIF(name: name ?? "")
-        }
-    }
+  }
+}
+
+public struct AnimationImages {
+  let frames: [UIImage]
+  let duration: Double
 }
 
 public class UIGIFImage: UIView {
-    private let imageView = UIImageView()
-    private var data: Data?
-    private var name: String?
-    
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+  private let imageView = UIImageView()
+  private var repetitions: Int? = nil
+  private var onComplete: (() -> Void)? = nil
+  private var data: Data?
+  private var name: String?
+  
+  
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+  }
+  
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+  
+  convenience init(
+    name: String,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.init()
+    self.name = name
+    initView()
+  }
+  
+  convenience init(
+    data: Data,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.init()
+    self.data = data
+    initView()
+  }
+  
+  public override func layoutSubviews() {
+    super.layoutSubviews()
+    imageView.frame = bounds
+    self.addSubview(imageView)
+  }
+  
+  func updateGIF(
+    data: Data,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.repetitions = repetitions
+    self.onComplete = onComplete
+    updateWithImage {
+      UIImage.gifImage(data: data)
     }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+  }
+  
+  func updateGIF(
+    name: String,
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    self.repetitions = repetitions
+    self.onComplete = onComplete
+    updateWithImage {
+      UIImage.gifImage(name: name)
     }
-    
-    convenience init(name: String) {
-        self.init()
-        self.name = name
-        initView()
-    }
-    
-    convenience init(data: Data) {
-        self.init()
-        self.data = data
-        initView()
-    }
-    
-    public override func layoutSubviews() {
-        super.layoutSubviews()
-        imageView.frame = bounds
-        self.addSubview(imageView)
-    }
-    
-    func updateGIF(data: Data) {
-        updateWithImage {
-            UIImage.gifImage(data: data)
+  }
+  
+  private func updateWithImage(_ getImage: @escaping () -> AnimationImages?) {
+    DispatchQueue.global(qos: .userInteractive).async {
+      if let animationImages = getImage() {
+        DispatchQueue.main.async {
+          CATransaction.begin()
+          CATransaction.setCompletionBlock {
+            self.onComplete?()
+          }
+          self.imageView.animationImages = animationImages.frames
+          self.imageView.animationDuration = animationImages.duration
+          self.imageView.animationRepeatCount = self.repetitions ?? Int.max
+          self.imageView.startAnimating()
+          CATransaction.commit()
         }
+      } else {
+        self.imageView.image = nil
+      }
     }
-    
-    func updateGIF(name: String) {
-        updateWithImage {
-            UIImage.gifImage(name: name)
-        }
-    }
-    
-    private func updateWithImage(_ getImage: @escaping () -> UIImage?) {
-        DispatchQueue.global(qos: .userInteractive).async {
-            let image = getImage()
-            
-            DispatchQueue.main.async {
-                self.imageView.image = image
-            }
-        }
-    }
-    
-    private func initView() {
-        imageView.contentMode = .scaleAspectFit
-    }
+  }
+  
+  private func initView(
+    repetitions: Int? = nil,
+    onComplete: (() -> Void)? = nil
+  ) {
+    imageView.contentMode = .scaleAspectFit
+    self.repetitions = repetitions
+    self.onComplete = onComplete
+  }
 }
 
 public extension UIImage {
-    class func gifImage(data: Data) -> UIImage? {
+    class func gifImage(data: Data) -> AnimationImages? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil)
         else {
             return nil
@@ -117,11 +174,12 @@ public extension UIImage {
             }
         }
         
-        return UIImage.animatedImage(with: frames,
-                                     duration: Double(duration) / 1000.0)
+      return AnimationImages(frames: frames, duration: Double(duration) / 1000.0)
+//        return UIImage.animatedImage(with: frames,
+//                                     duration: Double(duration) / 1000.0)
     }
     
-    class func gifImage(name: String) -> UIImage? {
+    class func gifImage(name: String) -> AnimationImages? {
         guard let url = Bundle.main.url(forResource: name, withExtension: "gif"),
               let data = try? Data(contentsOf: url)
         else {
@@ -142,63 +200,72 @@ private func gcd(_ a: Int, _ b: Int) -> Int {
 }
 
 private func delayForImage(at index: Int, source: CGImageSource) -> Double {
-    let defaultDelay = 1.0
-    
-    let cfProperties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
-    let gifPropertiesPointer = UnsafeMutablePointer<UnsafeRawPointer?>.allocate(capacity: 0)
-    defer {
-        gifPropertiesPointer.deallocate()
-    }
-    let unsafePointer = Unmanaged.passUnretained(kCGImagePropertyGIFDictionary).toOpaque()
-    if CFDictionaryGetValueIfPresent(cfProperties, unsafePointer, gifPropertiesPointer) == false {
-        return defaultDelay
-    }
-    let gifProperties = unsafeBitCast(gifPropertiesPointer.pointee, to: CFDictionary.self)
-    var delayWrapper = unsafeBitCast(CFDictionaryGetValue(gifProperties,
-                                                         Unmanaged.passUnretained(kCGImagePropertyGIFUnclampedDelayTime).toOpaque()),
-                                    to: AnyObject.self)
-    if delayWrapper.doubleValue == 0 {
-        delayWrapper = unsafeBitCast(CFDictionaryGetValue(gifProperties,
-                                                         Unmanaged.passUnretained(kCGImagePropertyGIFDelayTime).toOpaque()),
-                                    to: AnyObject.self)
-    }
-    
-    if let delay = delayWrapper as? Double,
-       delay > 0 {
-        return delay
-    } else {
-        return defaultDelay
-    }
+  let defaultDelay = 1.0
+  
+  let cfProperties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
+  let gifPropertiesPointer = UnsafeMutablePointer<UnsafeRawPointer?>.allocate(capacity: 0)
+  defer {
+    gifPropertiesPointer.deallocate()
+  }
+  let unsafePointer = Unmanaged.passUnretained(kCGImagePropertyGIFDictionary).toOpaque()
+  if CFDictionaryGetValueIfPresent(cfProperties, unsafePointer, gifPropertiesPointer) == false {
+    return defaultDelay
+  }
+  let gifProperties = unsafeBitCast(gifPropertiesPointer.pointee, to: CFDictionary.self)
+  var delayWrapper = unsafeBitCast(CFDictionaryGetValue(gifProperties,
+                                                        Unmanaged.passUnretained(kCGImagePropertyGIFUnclampedDelayTime).toOpaque()),
+                                   to: AnyObject.self)
+  if delayWrapper.doubleValue == 0 {
+    delayWrapper = unsafeBitCast(CFDictionaryGetValue(gifProperties,
+                                                      Unmanaged.passUnretained(kCGImagePropertyGIFDelayTime).toOpaque()),
+                                 to: AnyObject.self)
+  }
+  
+  if let delay = delayWrapper as? Double,
+     delay > 0 {
+    return delay
+  } else {
+    return defaultDelay
+  }
 }
 
 struct GIFImageTest: View {
-    @State private var imageData: Data? = nil
-    
-    var body: some View {
-        VStack {
-            GIFImage(name: "preview")
-                .frame(height: 300)
-            if let data = imageData {
-                GIFImage(data: data)
-                    .frame(width: 300)
-            } else {
-                Text("Loading...")
-                    .onAppear(perform: loadData)
-            }
+  @State private var imageData: Data? = nil
+  @State private var isDone = false
+  
+  var body: some View {
+    VStack {
+      GIFImage(name: "preview")
+        .frame(height: 300)
+      if let data = imageData {
+        GIFImage(data: data)
+          .frame(width: 300)
+        if isDone {
+          Text("Done")
+        } else {
+          GIFImage(data: data, repetitions: 2) {
+            isDone = true
+          }
+          .frame(width: 300)
         }
+      } else {
+        Text("Loading...")
+          .onAppear(perform: loadData)
+      }
     }
-    
-    private func loadData() {
-        let task = URLSession.shared.dataTask(with: URL(string: "https://github.com/globulus/swiftui-webview/raw/main/Images/preview_macos.gif?raw=true")!) { data, response, error in
-            imageData = data
-        }
-        task.resume()
+  }
+  
+  private func loadData() {
+    let task = URLSession.shared.dataTask(with: URL(string: "https://github.com/globulus/swiftui-webview/raw/main/Images/preview_macos.gif?raw=true")!) { data, response, error in
+      imageData = data
     }
+    task.resume()
+  }
 }
-
 
 struct GIFImage_Previews: PreviewProvider {
-    static var previews: some View {
-        GIFImageTest()
-    }
+  static var previews: some View {
+    GIFImageTest()
+  }
 }
+
