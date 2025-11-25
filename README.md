@@ -54,5 +54,6 @@ For a more detailed description of the code, [visit this recipe](https://swiftui
 
 ## Changelog
 
+* 1.1.1 - Allowed selecting Bundle other than main.
 * 1.1.0 - Added repetition count and completion block.
 * 1.0.0 - Initial release.
